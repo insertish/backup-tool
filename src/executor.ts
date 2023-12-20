@@ -3,13 +3,14 @@ import { Host, Plan } from "./planner.js";
 import colors from "@colors/colors";
 
 import duration from "dayjs/plugin/duration.js";
-import { createSSHExecutor } from "./executorHelpers.js";
+import { SSHExecutor, createSSHExecutor } from "./executorHelpers.js";
 import { resolve } from "path";
 import { rm } from "fs/promises";
 dayjs.extend(duration);
 
 export async function execute(
-  agent: Host | undefined,
+  hosts: Record<string, Host>,
+  agentId: string,
   plan: Plan,
   log: (s: string) => void
 ) {
@@ -17,18 +18,26 @@ export async function execute(
     log(
       `Skipping plan ${colors.gray(plan.id)} as it is ${colors.gray(plan.mode)}`
     );
+
     return;
   }
 
   log(`Preparing to run plan for ${colors.gray(plan.id)}`);
-  const executor = createSSHExecutor(agent!.ssh[plan.host._id]);
+  const executor = createSSHExecutor(
+    hosts[agentId]!.ssh[plan.host._id]
+  ) as SSHExecutor;
   await executor.ready();
 
   log(`Executor ready, running the strategy`);
   const pkgFn = await executor.execute(plan);
 
-  const { downloadLocally, retainOnHost, directlyCloneTo, redirectCloneTo } =
-    plan.clone;
+  const {
+    downloadLocally,
+    retainOnHost,
+    directlyCloneTo,
+    redirectCloneTo,
+    receiveCloneFrom,
+  } = plan.clone;
 
   const backupName = `${plan.id.replace(
     /\//g,
@@ -36,20 +45,44 @@ export async function execute(
   )}_${new Date().toISOString()}.tar.gz`;
 
   for (const host of directlyCloneTo) {
-    // TODO: upload the backup
+    log(`Uploading the backup to ${colors.gray(host.host)}`);
+    await executor.scpUpload(
+      pkgFn,
+      hosts[plan.host._id].ssh[host.host],
+      host.path + backupName
+    );
+  }
+
+  for (const host of receiveCloneFrom) {
+    log(`Downloading the backup to ${colors.gray(host.host)}`);
+    const downloadExecutor = createSSHExecutor(
+      hosts[agentId].ssh[host.host]
+    ) as SSHExecutor;
+    await downloadExecutor.ready();
+    await downloadExecutor.scpDownload(
+      pkgFn,
+      hosts[host.host].ssh[plan.host._id],
+      host.path + backupName
+    );
+    await downloadExecutor.finish();
   }
 
   if (downloadLocally) {
-    const localFile = `./backups/${backupName}`;
+    const localFile = resolve(`./backups/${backupName}`);
 
     log(`Downloading the backup to the agent`);
-    await executor.download(pkgFn, resolve(localFile));
+    await executor.download(pkgFn, localFile);
 
     for (const host of redirectCloneTo) {
       switch (host.type) {
         case "host":
-          log(`Uploading the backup to ${colors.gray(host.host)}`);
-          // TODO: upload the backup
+          log(`Uploading the local backup to ${colors.gray(host.host)}`);
+          const uploadExecutor = createSSHExecutor(
+            hosts[agentId].ssh[host.host]
+          );
+          await uploadExecutor.ready();
+          await uploadExecutor.upload(localFile, host.path + backupName);
+          await uploadExecutor.finish();
           break;
       }
     }

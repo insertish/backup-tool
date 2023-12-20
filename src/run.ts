@@ -35,7 +35,7 @@ if (
     try {
       const start = dayjs();
       const eT = () => dayjs.duration(dayjs().diff(start)).asSeconds();
-      await execute(HOSTS[AGENT], plan, (s) => {
+      await execute(HOSTS, AGENT, plan, (s) => {
         log.push(s);
         console.info(`[${eT()}s] ${s}`);
       });

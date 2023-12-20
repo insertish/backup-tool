@@ -82,6 +82,12 @@ export type CloneStrategy = {
    * Destinations we must upload to from the agent
    */
   redirectCloneTo: Destination[];
+
+  /**
+   * Destinations we can receive the clone direct from the host
+   * (as in, we can connect to the destination and download it there)
+   */
+  receiveCloneFrom: Destination[];
 };
 
 export type Plan = {
@@ -197,81 +203,80 @@ export function createPlan(
 
       let oneOrMoreHostsFailed = false;
 
+      const destinations = blueprint.destinations.filter((destination) => {
+        if (destination.type === "host") {
+          if (destination.host === agent || destination.host === host._id)
+            return false;
+
+          const destinationHost = hosts[destination.host];
+          if (!destinationHost || destinationHost.available === "unreachable") {
+            console.info(
+              `${colors.bgBrightRed(" ")} Host ${colors.gray(
+                destination.host
+              )} is unreachable from agent`
+            );
+
+            oneOrMoreHostsFailed = true;
+
+            return false;
+          }
+
+          return true;
+        } else {
+          throw "unimplemented";
+        }
+      });
+
       const clone: CloneStrategy = {
         retainOnHost: destinationHost ? { path: destinationHost.path } : false,
         downloadLocally: agentHost ? { path: agentHost.path } : false,
 
-        directlyCloneTo: blueprint.destinations.filter((destination) => {
-          if (destination.type === "host") {
-            if (destination.host === agent || destination.host === host._id)
-              return false;
+        directlyCloneTo: destinations.filter((destination) => {
+          if (typeof host.ssh[destination.host] === "undefined") return false;
 
-            if (typeof host.ssh[destination.host] === "undefined") return false;
+          console.info(
+            `${colors.bgBrightGreen(
+              " "
+            )} It will be uploaded directly to host ${colors.gray(
+              destination.host
+            )}`
+          );
 
-            const destinationHost = hosts[destination.host];
-            if (
-              !destinationHost ||
-              destinationHost.available === "unreachable"
-            ) {
-              console.info(
-                `${colors.bgBrightRed(" ")} Host ${colors.gray(
-                  destination.host
-                )} is unreachable from agent`
-              );
-
-              oneOrMoreHostsFailed = true;
-
-              return false;
-            }
-
-            console.info(
-              `${colors.bgBrightGreen(
-                " "
-              )} It will be uploaded directly to host ${colors.gray(
-                destination.host
-              )}`
-            );
-
-            return true;
-          } else {
-            throw "unimplemented";
-          }
+          return true;
         }),
-        redirectCloneTo: blueprint.destinations.filter((destination) => {
-          if (destination.type === "host") {
-            if (destination.host === agent || destination.host === host._id)
-              return false;
+        redirectCloneTo: destinations.filter((destination) => {
+          if (
+            typeof host.ssh[destination.host] !== "undefined" ||
+            typeof hosts[destination.host]?.ssh[host._id] !== "undefined"
+          )
+            return false;
 
-            if (typeof host.ssh[destination.host] !== "undefined") return false;
+          console.info(
+            `${colors.bgBrightGreen(
+              " "
+            )} It will be uploaded through the agent to host ${colors.gray(
+              destination.host
+            )}`
+          );
 
-            const destinationHost = hosts[destination.host];
-            if (
-              !destinationHost ||
-              destinationHost.available === "unreachable"
-            ) {
-              console.info(
-                `${colors.bgBrightRed(" ")} Host ${colors.gray(
-                  destination.host
-                )} is unreachable from agent`
-              );
+          return true;
+        }),
+        receiveCloneFrom: destinations.filter((destination) => {
+          if (
+            typeof host.ssh[destination.host] !== "undefined" ||
+            typeof hosts[destination.host]?.ssh[host._id] === "undefined"
+          )
+            return false;
 
-              oneOrMoreHostsFailed = true;
+          console.info(
+            `${colors.bgBrightGreen(
+              " "
+            )} It will be downloaded on the host ${colors.gray(
+              destination.host
+            )} directly`
+          );
 
-              return false;
-            }
-
-            console.info(
-              `${colors.bgBrightGreen(
-                " "
-              )} It will be uploaded through the agent to host ${colors.gray(
-                destination.host
-              )}`
-            );
-
-            return true;
-          } else {
-            throw "unimplemented";
-          }
+          return true;
         }),
       };
 

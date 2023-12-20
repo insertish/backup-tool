@@ -1,5 +1,6 @@
 import { Config as SSHConfig, NodeSSH } from "node-ssh";
 import { Host, Plan } from "./planner.js";
+import assert from "assert";
 
 export function tmp(ext = ".tar.gz") {
   return `/tmp/backup${Math.random().toString().substring(2)}${ext}`;
@@ -10,6 +11,7 @@ export abstract class Executor {
   abstract finish(): Promise<void>;
   abstract execute(plan: Plan): Promise<string>;
   abstract download(remoteFile: string, localFile: string): Promise<void>;
+  abstract upload(localFile: string, remoteFile: string): Promise<void>;
   abstract move(src: string, dest: string): Promise<void>;
   abstract delete(remoteFile: string): Promise<void>;
 }
@@ -23,6 +25,10 @@ export class LocalExecutor extends Executor {
   }
 
   async download(remoteFile: string, localFile: string): Promise<void> {
+    throw new Error("Method not implemented.");
+  }
+
+  async upload(localFile: string, remoteFile: string): Promise<void> {
     throw new Error("Method not implemented.");
   }
 
@@ -101,6 +107,44 @@ export class SSHExecutor extends Executor {
 
   async download(remoteFile: string, localFile: string): Promise<void> {
     await this.ssh.getFile(localFile, remoteFile);
+  }
+
+  async upload(localFile: string, remoteFile: string): Promise<void> {
+    await this.ssh.putFile(localFile, remoteFile);
+  }
+
+  async scpDownload(
+    remoteFile: string,
+    remote: SSHConfig,
+    executorLocalFile: string
+  ): Promise<void> {
+    assert(remote.privateKeyPath, "missing private key path");
+    assert(remote.username, "missing username");
+    assert(remote.host, "missing host");
+
+    await this.ssh.exec("scp", [
+      "-i",
+      remote.privateKeyPath,
+      `${remote.username}@${remote.host}:${remoteFile}`,
+      executorLocalFile,
+    ]);
+  }
+
+  async scpUpload(
+    executorLocalFile: string,
+    remote: SSHConfig,
+    remoteFile: string
+  ): Promise<void> {
+    assert(remote.privateKeyPath, "missing private key path");
+    assert(remote.username, "missing username");
+    assert(remote.host, "missing host");
+
+    await this.ssh.exec("scp", [
+      "-i",
+      remote.privateKeyPath,
+      executorLocalFile,
+      `${remote.username}@${remote.host}:${remoteFile}`,
+    ]);
   }
 
   async delete(pkgFn: string): Promise<void> {
