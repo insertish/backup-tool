@@ -1,0 +1,15 @@
+# node modules
+node_modules
+
+# build
+dist
+
+# local backups
+backups
+
+# configuration
+.env
+
+# old stuff
+config
+_oldCode.js
