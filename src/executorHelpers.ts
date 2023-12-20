@@ -66,6 +66,24 @@ export class SSHExecutor extends Executor {
       case "files":
         await this.ssh.exec("tar", ["czvfP", pkgFn, ...plan.strategy.paths]);
         break;
+      case "mongodb":
+        const fn = `/tmp/mongodump_${new Date().toISOString()}`;
+
+        try {
+          await this.ssh.exec("mongodump", [
+            "-o",
+            fn,
+            plan.strategy.connectionUrl,
+          ]);
+        } catch (err: any) {
+          if (("" + err).toString().includes("Failed")) {
+            throw err;
+          }
+        }
+
+        await this.ssh.exec("tar", ["czvfP", pkgFn, fn]);
+        await this.ssh.exec("rm", ["-r", fn]);
+        break;
     }
 
     if (plan.hooks?.post) {

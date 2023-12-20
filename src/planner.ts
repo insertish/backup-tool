@@ -4,10 +4,15 @@ import dayjs from "dayjs";
 import relativeTime from "dayjs/plugin/relativeTime.js";
 dayjs.extend(relativeTime);
 
-type BackupStrategy = {
-  type: "files";
-  paths: string[];
-};
+type BackupStrategy =
+  | {
+      type: "files";
+      paths: string[];
+    }
+  | {
+      type: "mongodb";
+      connectionUrl: string;
+    };
 
 type Destination = {
   type: "host";
