@@ -76,18 +76,25 @@ export class SSHExecutor extends Executor {
         const fn = `/tmp/mongodump_${new Date().toISOString()}`;
 
         try {
-          await this.ssh.exec("mongodump", [
-            "-o",
-            fn,
-            plan.strategy.connectionUrl,
-          ]);
+          await this.ssh.exec(
+            "mongodump",
+            ["-o", fn, plan.strategy.connectionUrl],
+            {
+              onStdout(chunk) {
+                console.log("stdout", chunk.toString("utf8"));
+              },
+              onStderr(chunk) {
+                console.log("stderr", chunk.toString("utf8"));
+              },
+            }
+          );
         } catch (err: any) {
           if (("" + err).toString().includes("Failed")) {
             throw err;
           }
         }
 
-        await this.ssh.exec("tar", ["czvfP", pkgFn, fn]);
+        await this.ssh.exec("tar", ["cvfP", pkgFn, fn]);
         await this.ssh.exec("rm", ["-r", fn]);
         break;
     }
