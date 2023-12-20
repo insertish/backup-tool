@@ -36,8 +36,9 @@ if (
       const start = dayjs();
       const eT = () => dayjs.duration(dayjs().diff(start)).asSeconds();
       await execute(HOSTS, AGENT, plan, (s) => {
-        log.push(s);
-        console.info(`[${eT()}s] ${s}`);
+        const o = `[${eT()}s] ${s}`;
+        log.push(o);
+        console.info(o);
       });
     } catch (err) {
       error = "" + err;
