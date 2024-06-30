@@ -19,9 +19,12 @@ type Destination = {
   host: string;
 
   /**
+   * For ssh-agent:
    * Path to folder or leading path for the file
-   *
    * e.g. /backups/ or /path/to/backup_
+   *
+   * For rsync-agent:
+   * Corresponding destination path on machine
    */
   path: string;
 };
@@ -45,6 +48,13 @@ export type Blueprint = {
       host: string;
       hooks?: Hooks;
       strategy: BackupStrategy;
+      destinations: Destination[];
+    }
+  | {
+      mode: "rsync-agent";
+      host: string;
+      hooks?: Hooks;
+      path: string;
       destinations: Destination[];
     }
   | {
@@ -167,7 +177,13 @@ export function createPlan(
         id: blueprint._id,
         mode: "skipped",
       };
-    } else {
+    } else if (blueprint.mode === "rsync-agent") {
+      return {
+        id: blueprint._id,
+        mode: "skipped",
+      };
+    }
+    {
       const host = hosts[blueprint.host];
       if (!host) throw `Host ${colors.gray(blueprint.host)} does not exist!`;
       if (!host.available) throw "Host is unavailable!";
